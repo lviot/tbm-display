@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <title>Onboarding Matrice LED TBM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Tailwind via CDN (optionnel mais pratique pour la démo) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React + ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-sky-100 via-rose-50 to-amber-100">
+<div id="root"></div>
+
+<script type="text/javascript">
+  const { useState, useEffect } = React;
+
+  // ---------- Types JS (commentaires) ----------
+  // Line: { id, code, color? }
+  // StopArea: { id, name, lines: Line[] }
+  // Direction: { id, name, line: Line }
+
+  // Données MOCK pour prévisualiser sans backend
+  const MOCK_STOP_AREAS = [
+    {
+      id: "1",
+      name: "Porte de Bourgogne",
+      lines: [
+        { id: "L-A", code: "A", color: "#38bdf8" },
+        { id: "L-C", code: "C", color: "#a855f7" },
+      ],
+    },
+    {
+      id: "2",
+      name: "Quinconces",
+      lines: [
+        { id: "L-B", code: "B", color: "#fb7185" },
+        { id: "L-C", code: "C", color: "#a855f7" },
+        { id: "L-D", code: "D", color: "#22c55e" },
+      ],
+    },
+  ];
+
+  const MOCK_DIRECTIONS = {
+    "1": [
+      {
+        id: "dir-1",
+        name: "Vers La Gardette",
+        line: { id: "L-A", code: "A", color: "#38bdf8" },
+      },
+      {
+        id: "dir-2",
+        name: "Vers Floirac Dravemont",
+        line: { id: "L-A", code: "A", color: "#38bdf8" },
+      },
+      {
+        id: "dir-3",
+        name: "Vers Parc des Expositions",
+        line: { id: "L-C", code: "C", color: "#a855f7" },
+      },
+    ],
+    "2": [
+      {
+        id: "dir-4",
+        name: "Vers Pessac Centre",
+        line: { id: "L-B", code: "B", color: "#fb7185" },
+      },
+      {
+        id: "dir-5",
+        name: "Vers Berges de Garonne",
+        line: { id: "L-C", code: "C", color: "#a855f7" },
+      },
+    ],
+  };
+
+  // Badge de ligne
+  function LineBadge({ line }) {
+    const bg = line.color || "#fb923c";
+    return React.createElement(
+      "span",
+      {
+        className:
+          "inline-flex h-7 min-w-[2.5rem] items-center justify-center rounded-full px-2 text-xs font-semibold text-white shadow-sm",
+        style: { background: bg },
+      },
+      line.code
+    );
+  }
+
+  function FancySelect(props) {
+    const {
+      label,
+      placeholder,
+      disabled,
+      options,
+      value,
+      onChange,
+      renderOption,
+      getKey,
+    } = props;
+
+    return React.createElement(
+      "div",
+      { className: "space-y-1 " + (disabled ? "opacity-50" : "") },
+      // label + reset
+      React.createElement(
+        "div",
+        { className: "flex items-center justify-between" },
+        React.createElement(
+          "span",
+          { className: "text-sm font-medium text-slate-800" },
+          label
+        ),
+        value &&
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "text-xs text-slate-500 hover:text-slate-700",
+            onClick: () => onChange(null),
+          },
+          "Réinitialiser"
+        )
+      ),
+      // select
+      React.createElement(
+        "div",
+        { className: "relative" },
+        React.createElement(
+          "select",
+          {
+            className:
+              "mt-1 block w-full appearance-none rounded-2xl border border-white/60 bg-white/80 px-3 py-3 text-sm text-slate-800 shadow-[0_10px_40px_rgba(15,23,42,0.12)] outline-none backdrop-blur-md transition focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60 disabled:cursor-not-allowed",
+            value: value ? getKey(value) : "",
+            disabled: disabled,
+            onChange: (e) => {
+              const selected =
+                options.find((opt) => getKey(opt) === e.target.value) ||
+                null;
+              onChange(selected);
+            },
+          },
+          React.createElement(
+            "option",
+            { value: "", disabled: true },
+            placeholder
+          ),
+          options.map((opt) =>
+            React.createElement(
+              "option",
+              { key: getKey(opt), value: getKey(opt) },
+              // On met juste du texte ici
+              String(renderOption(opt).props
+                ? renderOption(opt).props.children
+                : renderOption(opt))
+            )
+          )
+        ),
+        React.createElement(
+          "div",
+          {
+            className:
+              "pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400",
+          },
+          React.createElement(
+            "svg",
+            {
+              xmlns: "http://www.w3.org/2000/svg",
+              className: "h-4 w-4",
+              fill: "none",
+              viewBox: "0 0 24 24",
+              stroke: "currentColor",
+            },
+            React.createElement("path", {
+              strokeLinecap: "round",
+              strokeLinejoin: "round",
+              strokeWidth: "2",
+              d: "M19 9l-7 7-7-7",
+            })
+          )
+        )
+      ),
+      // preview sélection
+      value &&
+      React.createElement(
+        "div",
+        {
+          className:
+            "mt-1 rounded-2xl bg-white/70 px-3 py-2 text-xs text-slate-700 shadow-inner",
+        },
+        renderOption(value)
+      )
+    );
+  }
+
+  function App() {
+    const [stopAreas, setStopAreas] = useState([]);
+    const [directions, setDirections] = useState([]);
+    const [selectedStopArea, setSelectedStopArea] = useState(null);
+    const [selectedDirection, setSelectedDirection] = useState(null);
+
+    useEffect(() => {
+      // Simule un fetch API
+      setTimeout(() => {
+        setStopAreas(MOCK_STOP_AREAS);
+      }, 300);
+    }, []);
+
+    useEffect(() => {
+      if (!selectedStopArea) {
+        setDirections([]);
+        setSelectedDirection(null);
+        return;
+      }
+      setTimeout(() => {
+        setDirections(MOCK_DIRECTIONS[selectedStopArea.id] || []);
+      }, 300);
+    }, [selectedStopArea]);
+
+    return React.createElement(
+      "div",
+      {
+        className:
+          "min-h-screen w-full flex items-center justify-center px-4 py-6 text-slate-900",
+      },
+      React.createElement(
+        "div",
+        { className: "mx-auto w-full max-w-md" },
+        React.createElement(
+          "div",
+          {
+            className:
+              "relative overflow-hidden rounded-3xl bg-white/70 p-[1px] shadow-[0_20px_60px_rgba(15,23,42,0.18)] backdrop-blur-xl",
+          },
+          React.createElement(
+            "div",
+            {
+              className:
+                "relative flex h-full w-full flex-col gap-6 rounded-3xl bg-gradient-to-b from-white/90 to-sky-50/80 px-5 py-6 sm:px-7 sm:py-7",
+            },
+            React.createElement("div", {
+              className:
+                "pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-sky-300/40 via-indigo-300/20 to-rose-200/40 blur-3xl",
+            }),
+
+            // Header
+            React.createElement(
+              "header",
+              { className: "relative flex flex-col gap-2" },
+              React.createElement(
+                "div",
+                {
+                  className:
+                    "inline-flex max-w-fit items-center gap-2 rounded-full bg-sky-100/80 px-3 py-1 text-[11px] font-medium text-sky-700 shadow-sm",
+                },
+                React.createElement(
+                  "span",
+                  {
+                    className:
+                      "inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-[11px] font-bold text-sky-500 shadow",
+                  },
+                  "TBM"
+                ),
+                React.createElement(
+                  "span",
+                  null,
+                  "Onboarding matrice LED"
+                )
+              ),
+              React.createElement(
+                "h1",
+                {
+                  className:
+                    "text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl",
+                },
+                "Configure ton affichage temps réel"
+              ),
+              React.createElement(
+                "p",
+                { className: "text-xs text-slate-600 sm:text-sm" },
+                "Choisis un arrêt puis une direction. Ces choix seront utilisés pour piloter ta matrice LED en temps réel."
+              )
+            ),
+
+            // Main
+            React.createElement(
+              "main",
+              { className: "relative flex flex-col gap-4" },
+
+              React.createElement(FancySelect, {
+                label: "Arrêt (stop_area)",
+                placeholder: "Sélectionne un arrêt",
+                disabled: stopAreas.length === 0,
+                options: stopAreas,
+                value: selectedStopArea,
+                onChange: (v) => {
+                  setSelectedStopArea(v);
+                  setSelectedDirection(null);
+                },
+                getKey: (s) => s.id,
+                renderOption: (s) =>
+                  React.createElement(
+                    "span",
+                    {
+                      className:
+                        "inline-flex flex-wrap items-center gap-2",
+                    },
+                    React.createElement(
+                      "span",
+                      {
+                        className:
+                          "inline-flex flex-wrap items-center gap-1",
+                      },
+                      s.lines.slice(0, 4).map((line) =>
+                        React.createElement(LineBadge, {
+                          key: line.id,
+                          line,
+                        })
+                      ),
+                      s.lines.length > 4 &&
+                      React.createElement(
+                        "span",
+                        { className: "text-[10px] text-slate-500" },
+                        "+" + (s.lines.length - 4)
+                      )
+                    ),
+                    React.createElement(
+                      "span",
+                      { className: "font-medium" },
+                      s.name
+                    )
+                  ),
+              }),
+
+              React.createElement(FancySelect, {
+                label: "Direction",
+                placeholder: !selectedStopArea
+                  ? "Choisis d'abord un arrêt"
+                  : directions.length === 0
+                    ? "Aucune direction disponible"
+                    : "Sélectionne une direction",
+                disabled:
+                  !selectedStopArea || directions.length === 0,
+                options: directions,
+                value: selectedDirection,
+                onChange: setSelectedDirection,
+                getKey: (d) => d.id,
+                renderOption: (d) =>
+                  React.createElement(
+                    "span",
+                    {
+                      className:
+                        "inline-flex flex-wrap items-center gap-2",
+                    },
+                    React.createElement(LineBadge, { line: d.line }),
+                    React.createElement(
+                      "span",
+                      { className: "font-medium" },
+                      d.name
+                    )
+                  ),
+              })
+            ),
+
+            // Footer
+            React.createElement(
+              "footer",
+              {
+                className:
+                  "relative mt-2 flex flex-col gap-3 rounded-2xl bg-white/70 px-4 py-3 text-xs text-slate-600 shadow-inner",
+              },
+              React.createElement(
+                "div",
+                {
+                  className:
+                    "flex items-center justify-between gap-3",
+                },
+                React.createElement(
+                  "div",
+                  { className: "flex flex-col" },
+                  React.createElement(
+                    "span",
+                    {
+                      className:
+                        "text-[11px] font-semibold uppercase tracking-wide text-slate-400",
+                    },
+                    "Sélection actuelle"
+                  ),
+                  selectedStopArea
+                    ? React.createElement(
+                      "div",
+                      { className: "mt-1 flex flex-col gap-1" },
+                      React.createElement(
+                        "span",
+                        {
+                          className:
+                            "text-xs font-medium text-slate-800",
+                        },
+                        selectedStopArea.name
+                      ),
+                      selectedDirection
+                        ? React.createElement(
+                          "span",
+                          {
+                            className:
+                              "inline-flex items-center gap-2 text-[11px] text-slate-600",
+                          },
+                          React.createElement(LineBadge, {
+                            line: selectedDirection.line,
+                          }),
+                          React.createElement(
+                            "span",
+                            null,
+                            selectedDirection.name
+                          )
+                        )
+                        : React.createElement(
+                          "span",
+                          {
+                            className:
+                              "text-[11px] text-slate-500",
+                          },
+                          "Choisis une direction pour finaliser."
+                        )
+                    )
+                    : React.createElement(
+                      "span",
+                      {
+                        className:
+                          "mt-1 text-[11px] text-slate-500",
+                      },
+                      "Aucun arrêt sélectionné pour l'instant."
+                    )
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className:
+                      "inline-flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-400 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-sky-500/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50",
+                    disabled:
+                      !selectedStopArea || !selectedDirection,
+                    onClick: () => {
+                      if (
+                        !selectedStopArea ||
+                        !selectedDirection
+                      )
+                        return;
+                      alert(
+                        "Configuration enregistrée :\\n\\nArrêt : " +
+                        selectedStopArea.name +
+                        "\\nDirection : " +
+                        selectedDirection.name
+                      );
+                    },
+                  },
+                  "Lancer l'affichage"
+                )
+              ),
+              React.createElement(
+                "p",
+                { className: "text-[10px] text-slate-400" },
+                "Tu pourras brancher cette configuration directement à ton service temps réel et à ta matrice LED."
+              )
+            )
+          )
+        )
+      )
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(React.createElement(App));
+</script>
+</body>
+</html>
